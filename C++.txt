@@ -1,0 +1,319 @@
+#include <iostream>
+#include <fstream>
+#include <string>
+#include <vector>
+#include <termios.h>
+#include <unistd.h>
+#include <cstdio>
+
+using namespace std;
+
+struct Student {
+    int roll;
+    string name;
+    float marks;
+};
+
+struct User {
+    string username;
+    string password;
+    string role;
+};
+
+vector<User> users;
+string currentUser;
+string currentRole;
+
+const string STUDENT_FILE = "students.txt";
+const string USER_FILE = "users.txt";
+
+string getPassword() {
+    struct termios oldt, newt;
+    tcgetattr(STDIN_FILENO, &oldt);
+    newt = oldt;
+    newt.c_lflag &= ~(ECHO);
+    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+
+    string password;
+    char ch;
+    while ((ch = getchar()) != '\n' && ch != EOF) {
+        if (ch == 127 || ch == '\b') {
+            if (!password.empty()) {
+                password.pop_back();
+                cout << "\b \b";
+            }
+        } else {
+            password.push_back(ch);
+            cout << "*";
+        }
+    }
+
+    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+    cout << endl;
+    return password;
+}
+
+void createDefaultUsers() {
+    ofstream fout(USER_FILE);
+    fout << "admin admin123 admin\n";
+    fout << "staff1 staff123 staff\n";
+    fout << "guest guest guest\n";
+    fout.close();
+}
+
+void loadUsers() {
+    ifstream fin(USER_FILE);
+    if (!fin.is_open()) {
+        createDefaultUsers();
+        fin.open(USER_FILE);
+    }
+
+    string u, p, r;
+    while (fin >> u >> p >> r)
+        users.push_back({u, p, r});
+
+    fin.close();
+}
+
+void loadDefaultStudents() {
+    ifstream fin(STUDENT_FILE);
+    if (fin.is_open()) {
+        fin.close();
+        return;
+    }
+
+    ofstream fout(STUDENT_FILE);
+    fout << "1 Harsha 85.5\n";
+    fout << "2 Khabi 90.0\n";
+    fout << "3 Abhi 78.25\n";
+    fout << "4 Suraj 92.75\n";
+    fout << "5 Kiran 68.5\n";
+    fout.close();
+}
+
+bool loginSystem() {
+    string username, password;
+
+    cout << "============== LOGIN SCREEN ============\n";
+    cout << "Enter username: ";
+    cin >> username;
+    cout << "Enter password: ";
+    cin.ignore();
+    password = getPassword();
+
+    for (auto &user : users) {
+        if (user.username == username && user.password == password) {
+            currentUser = user.username;
+            currentRole = user.role;
+            return true;
+        }
+    }
+    return false;
+}
+
+void addStudent() {
+    Student st;
+    cout << "Enter roll number: ";
+    cin >> st.roll;
+    cout << "Enter name: ";
+    cin >> st.name;
+    cout << "Enter marks: ";
+    cin >> st.marks;
+
+    ofstream fout(STUDENT_FILE, ios::app);
+    fout << st.roll << " " << st.name << " " << st.marks << endl;
+    fout.close();
+
+    cout << "Student added successfully.\n";
+}
+
+void displayStudents() {
+    ifstream fin(STUDENT_FILE);
+    if (!fin) {
+        cout << "No records found.\n";
+        return;
+    }
+
+    Student st;
+    cout << "\n--- Student List ---\n";
+    while (fin >> st.roll >> st.name >> st.marks) {
+        cout << "Roll: " << st.roll << " | Name: " << st.name
+             << " | Marks: " << st.marks << endl;
+    }
+    fin.close();
+}
+
+void searchStudent() {
+    int roll;
+    cout << "Enter roll number to search: ";
+    cin >> roll;
+
+    ifstream fin(STUDENT_FILE);
+    Student st;
+    bool found = false;
+
+    while (fin >> st.roll >> st.name >> st.marks) {
+        if (st.roll == roll) {
+            cout << "\nRecord Found!\n";
+            cout << "Roll: " << st.roll << " | Name: " << st.name
+                 << " | Marks: " << st.marks << endl;
+            found = true;
+            break;
+        }
+    }
+
+    if (!found)
+        cout << "Student not found.\n";
+
+    fin.close();
+}
+
+void updateStudent() {
+    int roll;
+    cout << "Enter roll number to update: ";
+    cin >> roll;
+
+    ifstream fin(STUDENT_FILE);
+    ofstream fout("temp.txt");
+    Student st;
+    bool found = false;
+
+    while (fin >> st.roll >> st.name >> st.marks) {
+        if (st.roll == roll) {
+            cout << "Enter new name: ";
+            cin >> st.name;
+            cout << "Enter new marks: ";
+            cin >> st.marks;
+            found = true;
+        }
+        fout << st.roll << " " << st.name << " " << st.marks << endl;
+    }
+
+    fin.close();
+    fout.close();
+
+    remove(STUDENT_FILE.c_str());
+    rename("temp.txt", STUDENT_FILE.c_str());
+
+    if (found)
+        cout << "Record updated successfully!\n";
+    else
+        cout << "Student not found.\n";
+}
+
+void deleteStudent() {
+    int roll;
+    cout << "Enter roll number to delete: ";
+    cin >> roll;
+
+    ifstream fin(STUDENT_FILE);
+    ofstream fout("temp.txt");
+    Student st;
+    bool found = false;
+
+    while (fin >> st.roll >> st.name >> st.marks) {
+        if (st.roll == roll) {
+            found = true;
+            continue;
+        }
+        fout << st.roll << " " << st.name << " " << st.marks << endl;
+    }
+
+    fin.close();
+    fout.close();
+
+    remove(STUDENT_FILE.c_str());
+    rename("temp.txt", STUDENT_FILE.c_str());
+
+    if (found)
+        cout << "Record deleted successfully.\n";
+    else
+        cout << "Student not found.\n";
+}
+
+void adminMenu();
+void staffMenu();
+void guestMenu();
+
+void mainMenu() {
+    if (currentRole == "admin")
+        adminMenu();
+    else if (currentRole == "staff")
+        staffMenu();
+    else
+        guestMenu();
+}
+
+void adminMenu() {
+    int choice;
+    do {
+        cout << "\n=== Admin Menu ===\n";
+        cout << "1. Add new Student\n";
+        cout << "2. Display all Students\n";
+        cout << "3. Search Student\n";
+        cout << "4. Update Student\n";
+        cout << "5. Delete Student\n";
+        cout << "6. Logout\n";
+        cout << "Enter your choice: ";
+        cin >> choice;
+
+        switch (choice) {
+            case 1: addStudent(); break;
+            case 2: displayStudents(); break;
+            case 3: searchStudent(); break;
+            case 4: updateStudent(); break;
+            case 5: deleteStudent(); break;
+            case 6: cout << "Logging out...\n"; return;
+            default: cout << "Invalid choice!\n";
+        }
+    } while (true);
+}
+
+void staffMenu() {
+    int choice;
+    do {
+        cout << "\n=== Staff Menu ===\n";
+        cout << "1. Display all Students\n";
+        cout << "2. Search Student\n";
+        cout << "3. Logout\n";
+        cout << "Enter your choice: ";
+        cin >> choice;
+
+        switch (choice) {
+            case 1: displayStudents(); break;
+            case 2: searchStudent(); break;
+            case 3: cout << "Logging out...\n"; return;
+            default: cout << "Invalid choice!\n";
+        }
+    } while (true);
+}
+
+void guestMenu() {
+    int choice;
+    do {
+        cout << "\n=== Guest Menu ===\n";
+        cout << "1. Display all Students\n";
+        cout << "2. Logout\n";
+        cout << "Enter your choice: ";
+        cin >> choice;
+
+        switch (choice) {
+            case 1: displayStudents(); break;
+            case 2: cout << "Logging out...\n"; return;
+            default: cout << "Guest has limited access!\n";
+        }
+    } while (true);
+}
+
+int main() {
+    loadUsers();
+    loadDefaultStudents();
+
+    if (loginSystem()) {
+        mainMenu();
+    } else {
+        cout << "Login failed! Exiting...\n";
+    }
+
+    return 0;
+}
